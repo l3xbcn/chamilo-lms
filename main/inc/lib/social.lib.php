@@ -1029,4 +1029,102 @@ class SocialManager extends UserManager
         }
         return $content;
     }
+    /**
+     * Sends a message to someone's wall
+     * @param int user id of author
+     * @param int user id where we send the message
+     * @param string content of the message
+     * @return boolean
+     * @author Yannick Warnier
+     */
+    public static function sendWallMessage($userId, $friendId, $messageContent)
+    {
+        $tblMessage = Database::get_main_table(TABLE_MAIN_MESSAGE);
+        $userId = intval($userId);
+        $friendId = intval($friendId);
+
+        //Just in case we replace the and \n and \n\r while saving in the DB
+        $messageContent = str_replace(array("\n", "\n\r"), '<br />', $messageContent);
+        $cleanMessageContent = Database::escape_string($messageContent);
+
+        $now = api_get_utc_datetime();
+
+        $sql = 'INSERT INTO '.$tblMessage.'(
+            user_sender_id,user_receiver_id,msg_status,send_date,title,content
+            ) VALUES(
+            '.$userId.','.$friendId.','.MESSAGE_STATUS_WALL.',"'.$now.'","","'.$cleanMessageContent.'") ';
+        Database::query($sql);
+
+        $senderInfo = api_get_user_info($userId);
+        $notification = new Notification();
+        $notification->save_notification(Notification::NOTIFICATION_TYPE_WALL_MESSAGE, array($friendId), '', $messageContent, $senderInfo);
+
+        return true;
+    }
+    /**
+     * Gets all messages from someone's wall (within specific limits)
+     * @param int user id of wall shown
+     * @param string Date from which we want to show the messages, in UTC time
+     * @param int   Limit for the number of parent messages we want to show
+     * @return boolean
+     * @author Yannick Warnier
+     */
+    public static function getWallMessages($userId, $start = null, $limit = 10)
+    {
+        if (empty($start)) {
+            $start = '0000-00-00';
+        }
+        $tblMessage = Database::get_main_table(TABLE_MAIN_MESSAGE);
+        $userId = intval($userId);
+        $start = Database::escape_string($start);
+        // TODO: set a maximum of 3 months for messages
+        //if ($start == '0000-00-00') {
+        //
+        //}
+        $limit = intval($limit);
+        $messages = array();
+        $sql = "SELECT id, user_sender_id, send_date, content, parent_id FROM $tblMessage
+            WHERE user_receiver_id = $userId
+                AND send_date > '$start'
+                AND msg_status = " . MESSAGE_STATUS_WALL .
+                //" AND parent_id = 0 " .
+                " ORDER BY send_date DESC
+                LIMIT $limit";
+        $res = Database::query($sql);
+        if (Database::num_rows($res) > 0) {
+            while ($row = Database::fetch_array($res)) {
+                $messages[] = $row;
+            }
+        }
+        return $messages;
+    }
+    /**
+     * Gets all messages from someone's wall (within specific limits), formatted
+     * @param   int User ID of the person's wall
+     * @param   string  Start date (from when we want the messages until today)
+     * @param   int Limit to the number of messages we want
+     * @return  string  HTML formatted string to show messages
+     */
+    public static function getWallMessagesHTML($userId, $start = null, $limit = 10)
+    {
+        if (empty($start)) {
+            $start = '0000-00-00';
+        }
+        $messages = self::getWallMessages($userId, $start, $limit);
+        $formattedList = '<div>';
+        $users = array();
+        foreach ($messages as $message) {
+            $date = api_get_local_time($message['send_date']);
+            if (isset($users[$message['user_send_id']])) {
+                $user = $users[$message['user_send_id']]['complete_name'];
+            } else {
+                $users[$message['user_send_id']] = api_get_user_info($message['user_send_id']);
+                $user = $users[$message['user_send_id']]['complete_name'];
+            }
+            $formattedList .= '<span class="help-inline">' . sprintf(get_lang('SentOnXByY'), $date, '<a href="'.api_get_path(WEB_CODE_PATH).'social/profile.php?u='.$message['user_send_id'].'">'.$user.'</a>') . '</span>';
+            $formattedList .= '<div> ' . Security::remove_XSS($message['content']) . ' </div>';
+        }
+        $formattedList .= '</div>';
+        return $formattedList;
+    }
 }
