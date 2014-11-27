@@ -237,6 +237,17 @@ header #logo img{
 .well .form-search .input-append .search-session{
     width: 130px;
 }
+.well.form-search label.extra_field {
+    display: block;
+    clear: left;
+}
+.well.form-search label {
+    font-weight: bold;
+}
+.well.form-search input[type="radio"] {
+    margin-left: 8px;
+}
+
 /* SESSION CATALOG END*/
 
 .subnav .brand {

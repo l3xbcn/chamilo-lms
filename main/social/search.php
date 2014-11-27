@@ -154,7 +154,7 @@ $social_right_content = '<div class="span9">'.UserManager::get_search_form($quer
 
 // I'm searching something
 if ($query != '' || ($query_vars['search_type']=='1' && count($query_vars)>2) ) {
-    $itemPerPage = 9;
+    $itemPerPage = 1;
     
     if ($_GET['search_type']=='0' || $_GET['search_type']=='1') {
         $page = isset($_GET['users_page_nr']) ? intval($_GET['users_page_nr']) : 1;

@@ -2271,7 +2271,7 @@ class UserManager
      * @param string the internal value of the field
      * @return array with extra data info of a user i.e array('field_variable'=>'value');
      */
-    public static function get_extra_user_data_by_value($field_variable, $field_value, $all_visibility = true)
+    public static function get_extra_user_data_by_value($field_variable, $field_value, $all_visibility = true, $multiple = false)
     {
         $extra_data = array();
         $table_user_field = Database::get_main_table(TABLE_MAIN_USER_FIELD);
@@ -2291,7 +2291,10 @@ class UserManager
           }
 
           } */
-        $where = "field_variable='".Database::escape_string($field_variable)."' AND field_value='".Database::escape_string($field_value)."'";
+          
+        $field_value = Database::escape_string($field_value);
+        $where_value = $multiple ? "FIND_IN_SET('$field_value',REPLACE(field_value,';',','))" : "field_value='$field_value'";
+        $where = "field_variable='".Database::escape_string($field_variable)."' AND ".$where_value;
 
         $sql = "SELECT user_id FROM $table_user_field user_field INNER JOIN $table_user_field_values user_field_values
                     ON (user_field.id = user_field_values.field_id)
@@ -3569,6 +3572,7 @@ class UserManager
 
         $where_field = "";
         $where_extra_fields = UserManager::get_search_form_where_extra_fields();
+
         if ($field_id != 0) {
             $where_field = " field_id = $field_id AND ";
         }
@@ -3639,9 +3643,9 @@ class UserManager
         $extra_filtrabe_fields = array();
         if (is_array($extra_field_list)) {
             foreach ($extra_field_list as $extra_field) {
-                //if is enabled to filter and is a "<select>" field type
-                if ($extra_field[8]==1 && $extra_field[2]==4) { 
-                    $extra_filtrabe_fields[] = array('name'=> $extra_field[3], 'variable'=>$extra_field[1], 'data'=> $extra_field[9]);
+                //if is enabled to filter and is a single or multiple select or radio field type
+                if ($extra_field[8]==1 && (in_array($extra_field[2],array(3,4,5)))) { 
+                    $extra_filtrabe_fields[] = array('name'=> $extra_field[3], 'variable'=>$extra_field[1], 'data'=> $extra_field[9], 'multiple'=>($extra_field[2]==5));
                 }
             }
         }    
@@ -3660,7 +3664,7 @@ class UserManager
         $use_extra_fields = false;
       
         $extra_fields = UserManager::get_extra_filtrable_fields();
-      
+        
         if (is_array($extra_fields) && count($extra_fields)>0 ) {
             $result_list=array();
             foreach ($extra_fields as $extra_field) {
@@ -3668,7 +3672,7 @@ class UserManager
                 if (UserManager::is_extra_field_available($extra_field['variable'])) {
                     if (isset($_GET[$varname]) && $_GET[$varname]!='0') {
                         $use_extra_fields = true;
-                        $extra_field_result[]= UserManager::get_extra_user_data_by_value($extra_field['variable'], $_GET[$varname]);
+                        $extra_field_result[]= UserManager::get_extra_user_data_by_value($extra_field['variable'], $_GET[$varname], true, $extra_field['multiple']);
                     }
                 }
             }
@@ -3702,38 +3706,15 @@ class UserManager
      * @param string the value of the search box
      *
      */
-    public static function get_search_form($query)
+    public static function get_search_form($query, $accepted_field_types = null)
     {
-    
-        $extra_filtrable_fields = UserManager::get_extra_filtrable_fields();
-        
-        if (is_array($extra_filtrable_fields) && count($extra_filtrable_fields)>0 ) {
-            $extra_fields = '';
-            foreach ($extra_filtrable_fields as $extra_field) {
-                $extra_fields .=  '<label class="extra_field">'.$extra_field['name'].'</label>';
-                $varname = 'field_'.$extra_field['variable'];
-                $extra_fields .=  '&nbsp;<select name="'.$varname.'" class="extra_field">';
-                $extra_fields .=  '<option value="0">--'.get_lang('Select').'--</option>';
-                foreach ($extra_field['data'] as $option) {
-                    $checked='';
-                    if (isset($_GET[$varname])) {
-                        if ($_GET[$varname]==$option[1]) {
-                            $checked = 'selected="true"';
-                        }
-                    }
-                    $extra_fields .=  '<option value="'.$option[1].'" '.$checked.'>'.$option[1].'</option>';
-                }
-                $extra_fields .=  '</select>';
-                $extra_fields .=  '&nbsp;&nbsp;';
-            }
-        }
-        
+        $efu = new ExtraField('user');
+        $extra_fields = $efu->get_search_form_controls($accepted_field_types);
         $search_type = isset($_GET['search_type']) ? $_GET['search_type'] : null;
-
         return '
         <form method="GET" class="well form-search" action="'.api_get_path(WEB_PATH).'main/social/search.php">
                 <input placeholder="'.get_lang('UsersGroups').'" type="text" class="input-medium" value="'.api_htmlentities(Security::remove_XSS($query)).'" name="q"/> &nbsp;
-                ' . get_lang('Type') .' 
+                <label>' . get_lang('In') .'</label>
                 <select name="search_type" onchange="javascript: extra_field_toogle();">
                 <option value="0">--'.get_lang('Select').'--</option>
                 <option value="1"' . (($search_type=='1')?'selected="selected"':"") . '>--' . get_lang('User') .'--</option>

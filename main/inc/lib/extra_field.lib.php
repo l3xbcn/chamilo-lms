@@ -160,8 +160,66 @@ class ExtraField extends Model
 
         return $options;
     }
+    
+    public function get_all_data($accepted_field_types = null, $if_visible = true, $if_filtrable = true)
+    {
+        $field_option = new ExtraFieldOption($this->type);
+        // all the information of the field
+        if (!empty($accepted_field_types)) {
+            $field_types = Database::escape_string(implode(",",$accepted_field_types));
+            $field_type_filter = "WHERE field_type IN ($field_types)";
+        }
+        else {
+            $field_type_filter = 'WHERE 1=1';
+        }
+        $additional_filters = ($if_visible ? " AND field_visible=1" : null)  . ($if_filtrable ? " AND field_filter=1" : null);
 
-
+            $sql    = "SELECT * FROM  {$this->table} $field_type_filter $additional_filters";
+            $result = Database::query($sql);
+            $return = array();
+            while ($row = Database::fetch_array($result)) {
+                $row['options'] = $field_option->get_field_options_by_field(
+                    $row['id'],
+                    false,
+                    $order_field_options_by
+                );
+                $return[] = $row;
+            }
+        return $return;
+    }
+    
+    public function get_search_form_controls($accepted_field_types = null)
+    {
+        $extra_filtrable_fields = $this->get_all_data($accepted_field_types);
+        if (is_array($extra_filtrable_fields) && count($extra_filtrable_fields)>0 ) {
+            $extra_fields = '';
+            foreach ($extra_filtrable_fields as $extra_field) {
+                $extra_fields .=  '<label class="extra_field">'.$extra_field['field_display_text'].'</label>';
+                $varname = 'field_'.$extra_field['field_variable'];
+                $is_radio = ($extra_field['field_type'] == self::FIELD_TYPE_RADIO) ? true : false;
+                $input_start = $is_radio ? ('<span class="extra_field"><input type="radio" name="'.$varname.'"') : ('<option');
+                $input_end = $is_radio ? ('</input></span>') : ('</option>');
+                if (!$is_radio) {
+                    $extra_fields .=  '<select name="'.$varname.'" class="extra_field">';
+                    $extra_fields .=  $input_start.' value="0">--'.get_lang('Select').'--'.$input_end;
+                } else {
+                    $extra_fields .=  $input_start.' value="0" checked> '.get_lang('Any').$input_end;
+                }
+                foreach ($extra_field['options'] as $option) {
+                    $checked='';
+                    if (isset($_GET[$varname])) {
+                        if ($_GET[$varname]==$option['option_value']) {
+                            $checked = $is_radio ? 'checked' : 'selected="true"';
+                        }
+                    }
+                    $extra_fields .=  $input_start.' value="'.$option['option_value'].'" '.$checked.'>'.$option['option_display_text'].$input_end;
+                }
+                if (!$is_radio) $extra_fields .=  '</select>';
+            }
+            return $extra_fields;
+        }
+    }    
+    
     public function get_handler_field_info_by_field_variable($field_variable)
     {
         $field_variable = Database::escape_string($field_variable);
